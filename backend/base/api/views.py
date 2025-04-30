@@ -48,6 +48,19 @@ def register_user(request):
 
     return Response({'message': 'User registered successfully'}, status=status.HTTP_201_CREATED)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_books_view(request):
+    contributed = Book.objects.filter(contributor=request.user)
+    read = Book.objects.filter(user_statuses__user=request.user, user_statuses__status='read')
+    reading = Book.objects.filter(user_statuses__user=request.user, user_statuses__status='reading')
+
+    return Response({
+        'contributed': BookSerializer(contributed, many=True).data,
+        'read': BookSerializer(read, many=True).data,
+        'reading': BookSerializer(reading, many=True).data,
+    })
+
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
 
