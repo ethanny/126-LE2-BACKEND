@@ -19,4 +19,4 @@ class ProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(many=False, read_only=True)
     class Meta:
         model = Profile
-        fields = ('user', 'full_name', 'email')
+        fields = ('user', 'full_name')
