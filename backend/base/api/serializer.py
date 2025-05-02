@@ -33,6 +33,7 @@ class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ['id', 'user', 'text', 'created_at']
+        read_only_fields = ['user', 'review']
 
 
 # --- Review Serializer ---
@@ -43,6 +44,7 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = ['id', 'user', 'rating', 'title', 'text', 'created_at', 'comments']
+        read_only_fields = ['user', 'book']
 
 
 # --- Book Serializer (basic list/detail) ---
