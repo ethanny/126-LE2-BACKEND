@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from .serializer import MyTokenObtainPairSerializer, ProfileSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -24,7 +24,25 @@ def get_routes(request):
 
     return Response(routes)
 
+
 @api_view(['GET'])
+@permission_classes([AllowAny])
+def all_users(request):
+    # Get all users with their basic info
+    users = User.objects.all().values('id', 'username')
+    
+    # Convert QuerySet to list to allow modification
+    users_list = list(users)
+    
+    # Add review count for each user
+    for user_data in users_list:
+        review_count = Review.objects.filter(user_id=user_data['id']).count()
+        user_data['review_count'] = review_count
+    
+    return Response(users_list)
+
+@api_view(['GET'])
+
 @permission_classes([IsAuthenticated])
 def get_profile(request):
     user = request.user
@@ -48,8 +66,8 @@ def register_user(request):
 
     return Response({'message': 'User registered successfully'}, status=status.HTTP_201_CREATED)
 
+
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
 def user_books_view(request):
     contributed = Book.objects.filter(contributor=request.user)
     read = Book.objects.filter(user_statuses__user=request.user, user_statuses__status='read')
@@ -117,13 +135,14 @@ class CommentViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user, review=review)
 
 
-# --- Genre ViewSet (Read-Only) ---
 class GenreViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
+    permission_classes = [AllowAny]
 
 
 # --- UserBookStatus ViewSet ---
+
 class UserBookStatusViewSet(viewsets.ModelViewSet):
     serializer_class = UserBookStatusSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -139,3 +158,16 @@ class UserBookStatusViewSet(viewsets.ModelViewSet):
             defaults={"status": serializer.validated_data['status']}
         )
         return status_obj
+
+    @action(detail=False, methods=['delete'])
+    def remove(self, request):
+        book_id = request.query_params.get('book', None)
+        if not book_id:
+            return Response({"error": "Book ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            status_obj = UserBookStatus.objects.get(user=request.user, book_id=book_id)
+            status_obj.delete()
+            return Response({"message": "Book removed from shelf"}, status=status.HTTP_204_NO_CONTENT)
+        except UserBookStatus.DoesNotExist:
+            return Response({"error": "Book status not found"}, status=status.HTTP_404_NOT_FOUND)
