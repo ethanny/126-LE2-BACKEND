@@ -65,11 +65,12 @@ class UserBookStatus(models.Model):
     STATUS_CHOICES = [
         ('read', 'Read'),
         ('reading', 'Currently Reading'),
+        ('want', 'Want to Read'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='book_statuses')
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='user_statuses')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES)
 
     class Meta:
         unique_together = ('user', 'book')

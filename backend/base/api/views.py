@@ -72,11 +72,13 @@ def user_books_view(request):
     contributed = Book.objects.filter(contributor=request.user)
     read = Book.objects.filter(user_statuses__user=request.user, user_statuses__status='read')
     reading = Book.objects.filter(user_statuses__user=request.user, user_statuses__status='reading')
+    want = Book.objects.filter(user_statuses__user=request.user, user_statuses__status='want')
 
     return Response({
         'contributed': BookSerializer(contributed, many=True).data,
         'read': BookSerializer(read, many=True).data,
         'reading': BookSerializer(reading, many=True).data,
+        'want': BookSerializer(want, many=True).data,
     })
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -171,3 +173,15 @@ class UserBookStatusViewSet(viewsets.ModelViewSet):
             return Response({"message": "Book removed from shelf"}, status=status.HTTP_204_NO_CONTENT)
         except UserBookStatus.DoesNotExist:
             return Response({"error": "Book status not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(detail=False, methods=['get'], url_path='status')
+    def get_book_status(self, request):
+        book_id = request.query_params.get('book')
+        if not book_id:
+            return Response({"error": "Book ID is required"}, status=400)
+
+        try:
+            status_obj = UserBookStatus.objects.get(user=request.user, book_id=book_id)
+            return Response({"status": status_obj.status})
+        except UserBookStatus.DoesNotExist:
+            return Response({"status": None})
