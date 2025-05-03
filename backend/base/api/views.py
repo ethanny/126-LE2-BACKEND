@@ -13,6 +13,8 @@ from .serializer import (
     GenreSerializer, UserBookStatusSerializer
 )
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import ValidationError
+
 
 @api_view(['GET'])
 def get_routes(request):
@@ -98,6 +100,7 @@ class BookViewSet(viewsets.ModelViewSet):
 
 
 # --- Review ViewSet ---
+# Updated ReviewViewSet 
 class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -112,11 +115,24 @@ class ReviewViewSet(viewsets.ModelViewSet):
             raise serializer.ValidationError("You have already reviewed this book.")
         serializer.save(user=self.request.user, book=book)
 
+    def update(self, request, *args, **kwargs):
+        review = self.get_object()
+        if review.user != request.user:
+            return Response({'detail': 'Not allowed to edit others reviews.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
         review = self.get_object()
         if review.user != request.user:
             return Response({'detail': 'Not allowed to delete others reviews.'}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
+    
+    def perform_create(self, serializer):
+        book = get_object_or_404(Book, pk=self.kwargs['book_pk'])
+        # Allow only one review per user per book
+        if Review.objects.filter(user=self.request.user, book=book).exists():
+            raise ValidationError({"detail": "You have already reviewed this book."})
+        serializer.save(user=self.request.user, book=book)
 
 
 # --- Comment ViewSet ---
@@ -133,7 +149,18 @@ class CommentViewSet(viewsets.ModelViewSet):
         if Comment.objects.filter(user=self.request.user, review=review).exists():
             raise serializer.ValidationError("You have already commented on this review.")
         serializer.save(user=self.request.user, review=review)
+    
+    def update(self, request, *args, **kwargs):
+        comment = self.get_object()
+        if comment.user != request.user:
+            return Response({'detail': 'Not allowed to edit others comments.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
 
+    def destroy(self, request, *args, **kwargs):
+        comment = self.get_object()
+        if comment.user != request.user:
+            return Response({'detail': 'Not allowed to delete others comments.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
 class GenreViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Genre.objects.all()
