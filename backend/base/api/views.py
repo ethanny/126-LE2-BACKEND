@@ -13,6 +13,8 @@ from .serializer import (
     GenreSerializer, UserBookStatusSerializer
 )
 from django.shortcuts import get_object_or_404
+from collections import Counter
+from django.db.models import Count, Q, Avg
 
 @api_view(['GET'])
 def get_routes(request):
@@ -74,12 +76,66 @@ def user_books_view(request):
     reading = Book.objects.filter(user_statuses__user=request.user, user_statuses__status='reading')
     want = Book.objects.filter(user_statuses__user=request.user, user_statuses__status='want')
 
+    recommendations = get_recommendations_by_genre(request.user)
+
     return Response({
         'contributed': BookSerializer(contributed, many=True).data,
         'read': BookSerializer(read, many=True).data,
         'reading': BookSerializer(reading, many=True).data,
         'want': BookSerializer(want, many=True).data,
+        'recommendations': BookSerializer(recommendations, many=True).data,
     })
+
+def get_recommendations_by_genre(user):
+    """
+    Generate book recommendations based on the genres of books in the user's shelves.
+    
+    Algorithm:
+    1. Identify the most common genres in the user's read and reading shelves
+    2. Find popular books in those genres that the user hasn't interacted with yet
+    3. Return a curated list of recommendations based on ratings and genre relevance
+    
+    Args:
+        user: The user object for whom to generate recommendations
+        
+    Returns:
+        QuerySet of Book objects recommended for the user
+    """
+    # Get all books the user has interacted with
+    user_books = Book.objects.filter(
+        user_statuses__user=user
+    ).values_list('id', flat=True)
+    
+    # Get the genres from user's read and reading books
+    user_genres = Book.objects.filter(
+        user_statuses__user=user,
+        user_statuses__status__in=['read', 'reading']
+    ).values_list('genres__id', flat=True).distinct()
+    
+    # Remove None values if any exist
+    user_genres = [genre_id for genre_id in user_genres if genre_id is not None]
+    
+    # Count genre occurrences and get the top 3
+    genre_counter = Counter(user_genres)
+    top_genres = [genre_id for genre_id, _ in genre_counter.most_common(3)]
+    
+    if not top_genres:
+        # Fallback to popular books if no genres are found
+        return Book.objects.exclude(id__in=user_books).order_by('-reviews__rating')[:10]
+    
+    # Get recommendations based on top genres, excluding books the user already has
+    recommendations = Book.objects.filter(
+        genres__id__in=top_genres
+    ).exclude(
+        id__in=user_books
+    ).annotate(
+        relevance=Count('genres', filter=Q(genres__id__in=top_genres)),
+        avg_rating=Avg('reviews__rating')
+    ).order_by(
+        '-avg_rating', '-relevance'
+    ).distinct()[:10]
+    
+    return recommendations
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
